@@ -7,7 +7,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <memory>
-#include <iostream>
+#include "Config.h"
 
 float Camera::DEFAULT_CAMERA_SPEED = 0.03f;
 
@@ -25,9 +25,10 @@ Camera::Camera()
   lastY = 600.0 / 2.0;
   viewUpdated = true;
   _projectionMatrixUpdated = true;
-  zFar = 400.0f;
+  zFar = Config::singleton()->get<float>("zFar");
   zNear = 0.02f;
-  yFov = glm::radians(45.0f);
+  auto yFovDegs = Config::singleton()->get<float>("fov");
+  yFov = glm::radians(yFovDegs);
   projectionMatrix =
     glm::perspective(yFov, SCREEN_WIDTH / SCREEN_HEIGHT, zNear, zFar);
 }
@@ -189,4 +190,30 @@ void Camera::changeSpeed(float delta) {
 
 void Camera::resetSpeed() {
   cameraSpeed = DEFAULT_CAMERA_SPEED;
+}
+
+Ray createMouseRay(float mouseX, float mouseY, float screenWidth, float screenHeight, 
+                  const glm::mat4& projectionMatrix, const glm::mat4& viewMatrix) {
+    // Convert to NDC
+    float ndcX = (2.0f * mouseX) / screenWidth - 1.0f;
+    float ndcY = 1.0f - (2.0f * mouseY) / screenHeight;
+    
+    // Create ray in NDC space
+    glm::vec4 rayStart_ndc(ndcX, ndcY, -1.0, 1.0);
+    glm::vec4 rayEnd_ndc(ndcX, ndcY, 1.0, 1.0);
+    
+    // Transform to view space
+    glm::mat4 invProj = glm::inverse(projectionMatrix);
+    glm::vec4 rayStart_view = invProj * rayStart_ndc;
+    glm::vec4 rayEnd_view = invProj * rayEnd_ndc;
+    rayStart_view /= rayStart_view.w;
+    rayEnd_view /= rayEnd_view.w;
+    
+    // Transform to world space
+    glm::mat4 invView = glm::inverse(viewMatrix);
+    Ray ray;
+    ray.origin = glm::vec3(invView * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));  // Camera position
+    ray.direction = glm::normalize(glm::vec3(invView * glm::vec4(glm::normalize(glm::vec3(rayEnd_view - rayStart_view)), 0.0f)));
+    
+    return ray;
 }

@@ -1,5 +1,4 @@
 #include "world.h"
-#include <iostream>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <optional>
@@ -13,7 +12,6 @@
 #include "controls.h"
 #include "camera.h"
 #include "renderer.h"
-#include "app.h"
 
 using namespace std;
 
@@ -46,23 +44,36 @@ Controls::poll(GLFWwindow* window, Camera* camera, World* world)
 void
 Controls::handleKeys(GLFWwindow* window, Camera* camera, World* world)
 {
-  handleEscape(window);
-  handleModEscape(window);
-  handleControls(window, camera);
-  handleToggleFocus(window);
-  handleToggleApp(window, world, camera);
-  handleScreenshot(window);
-  handleSave(window);
-  handleSelection(window);
-  handleCodeBlock(window);
-  handleDebug(window);
-  handleToggleMeshing(window);
-  handleToggleWireframe(window);
-  handleLogBlockCounts(window);
-  handleLogBlockType(window);
-  handleDMenu(window, world);
-  handleWindowFlop(window);
-  handleChangePlayerSpeed(window);
+  handleQuit(window);
+  if (keysEnabled) {
+    handleModEscape(window);
+    handleControls(window, camera);
+    handleToggleCursor(window);
+    handleToggleApp(window, world, camera);
+    handleScreenshot(window);
+    handleSave(window);
+    handleSelection(window);
+    handleCodeBlock(window);
+    handleDebug(window);
+    handleToggleMeshing(window);
+    handleToggleWireframe(window);
+    handleLogBlockCounts(window);
+    handleLogBlockType(window);
+    handleDMenu(window, world);
+    handleWindowFlop(window);
+    handleChangePlayerSpeed(window);
+  }
+}
+
+void
+Controls::disableKeys()
+{
+  keysEnabled = false;
+}
+void
+Controls::enableKeys()
+{
+  keysEnabled = true;
 }
 
 double DEBOUNCE_TIME = 0.1;
@@ -81,7 +92,7 @@ Controls::handleDMenu(GLFWwindow* window, World* world)
   // its V menu for now :(
   bool dMenuActive = glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS;
   if (dMenuActive && debounce(lastKeyPressTime)) {
-    wm->dMenu();
+    wm->menu();
   }
 }
 
@@ -136,7 +147,7 @@ Controls::handleSelection(GLFWwindow* window)
 {
   bool shouldSelect = glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
   if (shouldSelect && debounce(lastKeyPressTime)) {
-    //world->action(SELECT_CUBE);
+    // world->action(SELECT_CUBE);
   }
 }
 
@@ -168,7 +179,8 @@ Controls::handleSave(GLFWwindow* window)
 void
 Controls::handleScreenshot(GLFWwindow* window)
 {
-  bool shouldCapture = glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS;
+  int screenshotKey = controlMappings.getKey("screenshot");
+  bool shouldCapture = glfwGetKey(window, screenshotKey) == GLFW_PRESS;
   if (shouldCapture && debounce(lastKeyPressTime)) {
     renderer->screenshot();
   }
@@ -179,15 +191,22 @@ Controls::handleClicks(GLFWwindow* window, World* world)
 {
   int state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
   if (state == GLFW_PRESS && debounce(lastClickTime)) {
-	  auto app = windowManagerSpace->getLookedAtApp();
-	  if(app) {
-		  goToApp(app.value());
-	  }
+    if(grabbedCursor) {
+      auto app = windowManagerSpace->getLookedAtApp();
+      if (app) {
+        goToApp(app.value());
+      }
+    } else {
+      // move objects
+      //
+      // auto mouseRay = createMouseRay(mouseX, mouseY, screenWidth, screenHeight, projectionMatrix, viewMatrix)
+      // do intersection
+    }
   }
 
   state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT);
   if (state == GLFW_PRESS && debounce(lastClickTime)) {
-    //world->action(REMOVE_CUBE);
+    // world->action(REMOVE_CUBE);
   }
 }
 
@@ -203,9 +222,10 @@ Controls::handleControls(GLFWwindow* window, Camera* camera)
 }
 
 void
-Controls::handleEscape(GLFWwindow* window)
+Controls::handleQuit(GLFWwindow* window)
 {
-  if (glfwGetKey(window, GLFW_KEY_ESCAPE)) {
+  auto quitKey = controlMappings.getKey("quit");
+  if (glfwGetKey(window, quitKey)) {
     glfwSetWindowShouldClose(window, true);
   }
 }
@@ -245,7 +265,8 @@ Controls::moveTo(glm::vec3 pos,
 }
 
 void
-Controls::handleWindowFlop(GLFWwindow* window) {
+Controls::handleWindowFlop(GLFWwindow* window)
+{
   if (glfwGetKey(window, GLFW_KEY_0) == GLFW_PRESS) {
     windowFlop += windowFlop_dt;
   }
@@ -274,92 +295,100 @@ Controls::handleChangePlayerSpeed(GLFWwindow* window)
                      glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
   int zeroPressed = glfwGetKey(window, GLFW_KEY_0) == GLFW_PRESS;
 
-  if(shiftPressed && zeroPressed && debounce(lastKeyPressTime)) {
+  if (shiftPressed && zeroPressed && debounce(lastKeyPressTime)) {
     camera->resetSpeed();
   }
 }
 
-  void Controls::goToApp(entt::entity app)
-  {
-    wm->passthroughInput();
-    float deltaZ = windowManagerSpace->getViewDistanceForWindowSize(app);
-    glm::vec3 rotationDegrees = windowManagerSpace->getAppRotation(app);
-    glm::quat rotationQuat = glm::quat(glm::radians(rotationDegrees));
+void
+Controls::goToApp(entt::entity app)
+{
+  wm->passthroughInput();
+  float deltaZ = windowManagerSpace->getViewDistanceForWindowSize(app);
+  glm::vec3 rotationDegrees = windowManagerSpace->getAppRotation(app);
+  glm::quat rotationQuat = glm::quat(glm::radians(rotationDegrees));
 
-    glm::vec3 targetPosition = windowManagerSpace->getAppPosition(app);
-    targetPosition = targetPosition + rotationQuat * glm::vec3(0, 0, deltaZ);
-    moveTo(targetPosition, rotationDegrees, windowFlop, [app, this]() {
-      wm->focusApp(app);
-    });
-  }
+  glm::vec3 targetPosition = windowManagerSpace->getAppPosition(app);
+  targetPosition = targetPosition + rotationQuat * glm::vec3(0, 0, deltaZ);
+  moveTo(targetPosition, rotationDegrees, windowFlop, [app, this]() {
+    wm->focusApp(app);
+  });
+}
 
-  void Controls::handleToggleApp(
-    GLFWwindow * window, World * world, Camera * camera)
-  {
-    auto app = windowManagerSpace->getLookedAtApp();
-    if (app.has_value()) {
-      int rKeyPressed = glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS;
-      if (rKeyPressed && debounce(lastKeyPressTime)) {
-        goToApp(app.value());
-      }
+void
+Controls::handleToggleApp(GLFWwindow* window, World* world, Camera* camera)
+{
+  auto app = windowManagerSpace->getLookedAtApp();
+  if (app.has_value()) {
+    int rKeyPressed = glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS;
+    if (rKeyPressed && debounce(lastKeyPressTime)) {
+      goToApp(app.value());
     }
   }
+}
 
-  void Controls::handleSelectApp(GLFWwindow * window)
-  {
-    auto app = windowManagerSpace->getLookedAtApp();
-    if (app) {
-      int keyPressed = glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS;
-      if (keyPressed && debounce(lastKeyPressTime)) {
-        windowManagerSpace->toggleAppSelect(*app);
-      }
+void
+Controls::handleSelectApp(GLFWwindow* window)
+{
+  auto app = windowManagerSpace->getLookedAtApp();
+  if (app) {
+    int keyPressed = glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS;
+    if (keyPressed && debounce(lastKeyPressTime)) {
+      windowManagerSpace->toggleAppSelect(*app);
     }
   }
+}
 
-  void Controls::doAfter(shared_ptr<bool> isDone, function<void()> actionFn)
-  {
-    DeferedAction action;
-    action.isDone = isDone;
-    action.fn = actionFn;
-    deferedActions.push_back(action);
-  }
+void
+Controls::doAfter(shared_ptr<bool> isDone, function<void()> actionFn)
+{
+  DeferedAction action;
+  action.isDone = isDone;
+  action.fn = actionFn;
+  deferedActions.push_back(action);
+}
 
-  void Controls::doDeferedActions()
-  {
-    vector<vector<DeferedAction>::iterator> toDelete;
-    for (auto it = deferedActions.begin(); it != deferedActions.end(); it++) {
-      if (*it->isDone) {
-        it->fn();
-        toDelete.push_back(it);
-      }
-    }
-    for (auto it : toDelete) {
-      deferedActions.erase(it);
-    }
-  }
-
-  void Controls::handleToggleFocus(GLFWwindow * window)
-  {
-    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
-      if (debounce(lastKeyPressTime)) {
-        if (grabbedCursor) {
-          grabbedCursor = false;
-          glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-          wm->captureInput();
-        } else {
-          grabbedCursor = true;
-          resetMouse = true;
-          glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-          wm->passthroughInput();
-        }
-      }
+void
+Controls::doDeferedActions()
+{
+  vector<vector<DeferedAction>::iterator> toDelete;
+  for (auto it = deferedActions.begin(); it != deferedActions.end(); it++) {
+    if (*it->isDone) {
+      it->fn();
+      toDelete.push_back(it);
     }
   }
-
-  void Controls::wireWindowManager(
-    shared_ptr<WindowManager::Space> windowManagerSpace)
-  {
-    this->windowManagerSpace = windowManagerSpace;
+  for (auto it : toDelete) {
+    deferedActions.erase(it);
   }
+}
 
-  void Controls::handleMakeWindowBootable(GLFWwindow * window) {}
+void
+Controls::handleToggleCursor(GLFWwindow* window)
+{
+  auto toggleCursorKey = controlMappings.getKey("toggle_cursor");
+  if (glfwGetKey(window, toggleCursorKey) == GLFW_PRESS &&
+      debounce(lastKeyPressTime)) {
+    if (grabbedCursor) {
+      grabbedCursor = false;
+      glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+      wm->captureInput();
+    } else {
+      grabbedCursor = true;
+      resetMouse = true;
+      glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+      wm->passthroughInput();
+    }
+  }
+}
+
+void
+Controls::wireWindowManager(shared_ptr<WindowManager::Space> windowManagerSpace)
+{
+  this->windowManagerSpace = windowManagerSpace;
+}
+
+void
+Controls::handleMakeWindowBootable(GLFWwindow* window)
+{
+}

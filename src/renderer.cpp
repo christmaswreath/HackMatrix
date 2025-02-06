@@ -25,6 +25,9 @@
 #include <ctime>
 #include <iomanip>
 
+#define SHADOWS_ENABLED true
+#define DISABLE_CULLING true
+
 float HEIGHT = SCREEN_HEIGHT / SCREEN_WIDTH / 2.0;
 float MAX_LIGHTS = 5;
 
@@ -261,6 +264,7 @@ Renderer::Renderer(shared_ptr<EntityRegistry> registry,
 
   shader->setInt("allBlocks", 0);
   shader->setInt("totalBlockTypes", images.size());
+  shader->setBool("SHADOWS_ENABLED", SHADOWS_ENABLED);
 
   initAppTextures();
 
@@ -552,7 +556,10 @@ Renderer::renderApps()
     registry->view<X11App, Positionable>(entt::exclude<Bootable>);
   for (auto [entity, app, positionable] : positionableNonBootable.each()) {
     shader->setMatrix4("model", positionable.modelMatrix);
-    shader->setMatrix4("bootableScale", glm::mat4(1.0));
+
+    // OPTIMIZATION
+    // TODO: cache the recomputeHeightScaler into the app itself and don't recompute it every render
+    shader->setMatrix4("bootableScale", app.heightScalar);
     shader->setInt("appNumber", app.getAppIndex());
     shader->setBool("appTransparent", false);
     glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -674,6 +681,9 @@ Renderer::renderModels(RenderPerspective perspective)
   int count = 0;
   for (auto [entity, p, m] : modelView.each()) {
     bool shouldDraw = systems::isOnFrustum(registry, entity, frustum);
+    if(DISABLE_CULLING) {
+      shouldDraw = true;
+    }
     if (!shouldDraw) {
       continue;
     }

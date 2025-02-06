@@ -9,6 +9,7 @@
 #include "app.h"
 #include "world.h"
 #include "WindowManager/WindowManager.h"
+#include "ControlMappings.h"
 
 struct DeferedAction
 {
@@ -18,6 +19,7 @@ struct DeferedAction
 
 class Controls
 {
+  ControlMappings controlMappings;
   shared_ptr<blocks::TexturePack> texturePack;
   shared_ptr<WindowManager::WindowManager> wm;
   float windowFlop = 0.25;
@@ -35,11 +37,12 @@ class Controls
   int clickY = 100;
   vector<DeferedAction> deferedActions;
   shared_ptr<WindowManager::Space> windowManagerSpace;
+  bool keysEnabled = true;
 
   void handleControls(GLFWwindow* window, Camera* camera);
-  void handleEscape(GLFWwindow* window);
+  void handleQuit(GLFWwindow* window);
   void handleModEscape(GLFWwindow* window);
-  void handleToggleFocus(GLFWwindow* window);
+  void handleToggleCursor(GLFWwindow* window);
   void handleToggleApp(GLFWwindow* window, World* world, Camera* camera);
   void handleSelectApp(GLFWwindow* window);
   void handleDMenu(GLFWwindow* window, World* world);
@@ -81,6 +84,7 @@ public:
               optional<glm::vec3> rotation,
               float secs,
               optional<function<void()>> = nullopt);
-  void disable();
+  void disableKeys();
+  void enableKeys();
   void wireWindowManager(shared_ptr<WindowManager::Space>);
 };

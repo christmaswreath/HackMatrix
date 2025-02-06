@@ -6,9 +6,11 @@
 #include "renderer.h"
 #include "screen.h"
 #include "systems/Boot.h"
+#include "Config.h"
 #include <X11/X.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <algorithm>
 #include <cstddef>
 #include <glm/glm.hpp>
@@ -33,8 +35,8 @@
 
 namespace WindowManager {
 
-void WindowManager::dMenu() {
- int exitCode = system("dmenu_run");
+void WindowManager::menu() {
+  std::thread([this] { std::system(menuProgram.c_str()); }).detach();
 }
 
 int forkApp(string cmd, char **envp, string args) {
@@ -79,12 +81,6 @@ void WindowManager::forkOrFindApp(string cmd, string pidOf, string className,
 
 void WindowManager::createAndRegisterApps(char **envp) {
   logger->info("enter createAndRegisterApps()");
-
-  if (EDGE) {
-    forkOrFindApp("/usr/bin/microsoft-edge", "msedge", "Microsoft-edge",
-                  microsoftEdge, envp);
-    appsWithHotKeys.push_back(microsoftEdge);
-  }
   auto alreadyBooted = systems::getAlreadyBooted(registry);
   for(auto entityAndPid : alreadyBooted) {
     auto bootable = registry->get<Bootable>(entityAndPid.first);
@@ -98,8 +94,6 @@ void WindowManager::createAndRegisterApps(char **envp) {
   //forkOrFindApp("/usr/bin/emacs", "emacs", "Emacs", ideSelection.emacs, envp);
   //forkOrFindApp("/usr/bin/code", "emacs", "Emacs", ideSelection.vsCode, envp);
   //killTerminator();
-  addApps();
-
   logger->info("exit createAndRegisterApps()");
 }
 
@@ -144,22 +138,11 @@ void WindowManager::captureInput() {
   XFlush(display);
 }
 
-void WindowManager::addApps() {
-  if (MAGICA) {
-    space->addApp(magicaVoxel);
-  }
-  if (TERM) {
-    space->addApp(terminator);
-  }
-  if (EDGE) {
-    space->addApp(microsoftEdge);
-  }
-  if (OBS) {
-    space->addApp(obs);
-  }
-}
-
-  void WindowManager::wire(shared_ptr<WindowManager> sharedThis ,Camera *camera, Renderer *renderer) {
+void
+WindowManager::wire(shared_ptr<WindowManager> sharedThis,
+                    Camera* camera,
+                    Renderer* renderer)
+{
   space = make_shared<Space>(registry, renderer, camera, logSink);
   renderer->wireWindowManager(sharedThis, space);
   controls->wireWindowManager(space);
@@ -259,6 +242,9 @@ void WindowManager::onHotkeyPress(XKeyEvent event) {
   KeyCode qKeyCode = XKeysymToKeycode(display, XK_q);
   KeyCode oneKeyCode = XKeysymToKeycode(display, XK_1);
 
+  KeyCode windowLargerCode = XKeysymToKeycode(display, XK_equal);
+  KeyCode windowSmallerCode = XKeysymToKeycode(display, XK_minus);
+
   if (event.keycode == eKeyCode && event.state & Mod4Mask) {
     // Windows Key (Super_L) + Ctrl + E is pressed
     unfocusApp();
@@ -270,6 +256,21 @@ void WindowManager::onHotkeyPress(XKeyEvent event) {
       app.close();
     }
   }
+
+  if (event.keycode == windowLargerCode && event.state & Mod4Mask) {
+    if (currentlyFocusedApp.has_value()) {
+      lock_guard<mutex> lock(renderLoopMutex);
+      events.push_back(WindowEvent{ LARGER, currentlyFocusedApp.value() });
+    }
+  }
+
+  if (event.keycode == windowSmallerCode && event.state & Mod4Mask) {
+    if (currentlyFocusedApp.has_value()) {
+      lock_guard<mutex> lock(renderLoopMutex);
+      events.push_back(WindowEvent{ SMALLER, currentlyFocusedApp.value() });
+    }
+  }
+
   for (int i = 0; i < min((int)appsWithHotKeys.size(), 9); i++) {
     KeyCode code = XKeysymToKeycode(display, XK_1 + i);
     if (event.keycode == code && event.state & Mod4Mask && event.state & ShiftMask) {
@@ -416,6 +417,18 @@ void WindowManager::adjustAppsToAddAfterAdditions(vector<X11App*> &waitForRemova
 
 void WindowManager::tick() {
   lock_guard<mutex> lock(renderLoopMutex);
+
+  for (auto it = events.begin(); it != events.end(); it++) {
+    auto app = registry->try_get<X11App>(it->window);
+    if(it->type == SMALLER) {
+      app->smaller();
+    }
+    if(it->type == LARGER) {
+      app->larger();
+    }
+  }
+  events.clear();
+
   for (auto it = appsToRemove.begin(); it != appsToRemove.end(); it++) {
     try {
       if (currentlyFocusedApp == *it) {
@@ -570,6 +583,8 @@ void WindowManager::setWMProps(Window root) {
 WindowManager::WindowManager(shared_ptr<EntityRegistry> registry, Window matrix,
                              spdlog::sink_ptr loggerSink)
     : matrix(matrix), logSink(loggerSink), registry(registry) {
+
+  menuProgram = Config::singleton()->get<std::string>("menu_program");
   logger = make_shared<spdlog::logger>("wm", loggerSink);
   logger->set_level(spdlog::level::debug);
   logger->flush_on(spdlog::level::info);

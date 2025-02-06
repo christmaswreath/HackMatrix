@@ -5,7 +5,6 @@
 #include "texture.h"
 #include <glad/glad.h>
 #include <iostream>
-#include <stdio.h>
 #include <cstdlib>
 
 using namespace std;
@@ -183,6 +182,8 @@ Texture::Texture(vector<string> fnames, GLenum unit)
 
 Texture::Texture(GLenum unit)
 {
+  width = 0;
+  height = 0;
   initAndBindGlTexture(unit);
   setTextureParameters(false, false);
   blankData();

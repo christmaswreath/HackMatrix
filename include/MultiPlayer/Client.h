@@ -20,6 +20,8 @@ public:
   void startUpdateThread();
   void updateThreadLoop();
   void poll();
+  bool shouldSendPlayerPacket();
+  void justSentPlayerPacket();
 
 private:
   ENetHost* client;

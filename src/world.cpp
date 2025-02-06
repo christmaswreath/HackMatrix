@@ -1,17 +1,13 @@
 #include "world.h"
-#include "app.h"
 #include "chunk.h"
 #include "components/BoundingSphere.h"
 #include "coreStructs.h"
-#include "enkimi.h"
 #include "glm/geometric.hpp"
 #include "loader.h"
 #include "renderer.h"
-#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <deque>
-#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <glm/glm.hpp>
@@ -27,7 +23,6 @@
 #include "systems/Update.h"
 #include "utility.h"
 #include <csignal>
-#include "memory.h"
 #include "systems/ApplyRotation.h"
 #include "tracy/Tracy.hpp"
 
@@ -50,21 +45,6 @@ World::World(shared_ptr<EntityRegistry> registry,
   dynamicCube = make_shared<DynamicCube>(glm::vec3(0.0f, 8.0f, 0.0f),
                                          glm::vec3(0.1f, 0.1f, 0.1f));
   dynamicObjects->addObject(dynamicCube);
-
-  /* Shows how to init entity and components. Will need to do this with imgui
-  auto npc = registry->createPersistent();
-  registry->emplace<Model>(npc, "/home/collin/matrix/vox/hacker.obj");
-  registry->emplace<Positionable>(npc, glm::vec3(0, 0.2, -1.0), 0.1);
-
-  auto cave = registry->createPersistent();
-  registry->emplace<Model>(cave, "/home/collin/matrix/vox/cave.obj");
-  registry->emplace<Positionable>(cave, glm::vec3(0, 0, 0), 0.4);
-
-  auto light = registry->createPersistent();
-  registry->emplace<Model>(light, "/home/collin/matrix/vox/light.obj");
-  registry->emplace<Positionable>(light, glm::vec3(-0.6, 1.5, 0), 0.1);
-  registry->emplace<Light>(light, glm::vec3(1.0,1.0,1.0));
-  */
 }
 
 void
@@ -1008,5 +988,5 @@ World::tick()
     renderer->updateDynamicObjects(dynamicObjects);
   }
   dynamicCube->move(glm::vec3(0.0f, 0.0f, 0.01f));
-  mesh();
+  //mesh();
 }

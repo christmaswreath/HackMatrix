@@ -1,9 +1,9 @@
-# Detect if the distro is arch based
-ARCH_CHECK := $(shell grep -q 'arch' /etc/os-release && echo "true" || echo "false")
+# Detect if the distro is one that uses external fmt
+EXTERNAL_FMT_CHECK := $(shell grep -q 'void' /etc/os-release && echo "true" || echo "false")
 
-# Set extra linker flags for Arch Linux
-ifeq ($(ARCH_CHECK),true)
-    EXTRA_LDFLAGS := -labsl_log_internal_check_op -labsl_log_internal_message
+# Set extra compiler flags for Arch Linux
+ifeq ($(EXTERNAL_FMT_CHECK),true)
+    FLAGS+= -D SPDLOG_FMT_EXTERNAL
 endif
 
 PROTO_DIR = protos
@@ -15,17 +15,22 @@ INCLUDES        = -Iinclude -I/usr/local/include -Iinclude/imgui -Itracy/public
 LOADER_FLAGS = -march=native -funroll-loops
 SQLITE_SOURCES = $(wildcard src/sqlite/*.cpp)
 SQLITE_OBJECTS = $(patsubst src/sqlite/%.cpp, build/%.o, $(SQLITE_SOURCES))
-ALL_OBJECTS = build/systems/Player.o build/MultiPlayer/Server.o build/MultiPlayer/Client.o build/MultiPlayer/Gui.o build/screen.o build/systems/Light.o build/components/Light.o  build/systems/Boot.o build/components/Bootable.o build/IndexPool.o build/WindowManager/Space.o build/systems/Move.o build/systems/ApplyTranslation.o build/systems/Derivative.o build/systems/Update.o build/systems/Intersections.o build/systems/Scripts.o build/components/Scriptable.o build/components/Parent.o build/components/RotateMovement.o build/components/Lock.o build/components/Key.o build/systems/KeyAndLock.o build/systems/Door.o build/systems/ApplyRotation.o build/persister.o build/engineGui.o build/entity.o build/renderer.o build/shader.o build/texture.o build/world.o build/camera.o build/api.o build/controls.o build/app.o build/WindowManager/WindowManager.o build/logger.o build/engine.o build/cube.o build/chunk.o build/mesher.o build/loader.o build/utility.o build/blocks.o build/dynamicObject.o build/assets.o build/model.o build/mesh.o build/imgui/imgui.o build/imgui/imgui_draw.o build/imgui/imgui_impl_opengl3.o build/imgui/imgui_widgets.o build/imgui/imgui_demo.o build/imgui/imgui_impl_glfw.o build/imgui/imgui_tables.o build/enkimi.o build/miniz.o src/api.pb.cc src/glad.c src/glad_glx.c $(SQLITE_OBJECTS) tracy/public/TracyClient.cpp
-LIBS = -lzmq -lX11 -lXcomposite -lXtst -lXext -lXfixes -lprotobuf -lspdlog -lfmt -Llib -lglfw -lGL -lpthread -lassimp -lsqlite3
+ALL_OBJECTS = build/ControlMappings.o build/Config.o build/systems/Player.o build/MultiPlayer/Server.o build/MultiPlayer/Client.o build/MultiPlayer/Gui.o build/screen.o build/systems/Light.o build/components/Light.o  build/systems/Boot.o build/components/Bootable.o build/IndexPool.o build/WindowManager/Space.o build/systems/Move.o build/systems/ApplyTranslation.o build/systems/Derivative.o build/systems/Update.o build/systems/Intersections.o build/systems/Scripts.o build/components/Scriptable.o build/components/Parent.o build/components/RotateMovement.o build/components/Lock.o build/components/Key.o build/systems/KeyAndLock.o build/systems/Door.o build/systems/ApplyRotation.o build/persister.o build/engineGui.o build/entity.o build/renderer.o build/shader.o build/texture.o build/world.o build/camera.o build/api.o build/controls.o build/app.o build/WindowManager/WindowManager.o build/logger.o build/engine.o build/cube.o build/chunk.o build/mesher.o build/loader.o build/utility.o build/blocks.o build/dynamicObject.o build/assets.o build/model.o build/mesh.o build/imgui/imgui.o build/imgui/imgui_draw.o build/imgui/imgui_impl_opengl3.o build/imgui/imgui_widgets.o build/imgui/imgui_demo.o build/imgui/imgui_impl_glfw.o build/imgui/imgui_tables.o build/enkimi.o build/miniz.o src/api.pb.cc src/glad.c src/glad_glx.c $(SQLITE_OBJECTS) tracy/public/TracyClient.cpp
+
+LIBS = -lzmq -lX11 -lXcomposite -lXtst -lXext -lXfixes -lprotobuf -lspdlog -lfmt -Llib $(shell pkg-config --libs glfw3) -lGL -lpthread -lassimp -lsqlite3 $(shell pkg-config --libs protobuf)
+
 
 all: FLAGS+=-O3 -g
-all: include/protos/api.pb.h matrix trampoline build/diagnosis tools/deployTools/bootServer
+all: tracy include/protos/api.pb.h matrix trampoline build/diagnosis tools/deployTools/bootServer
 
 profiled: FLAGS+=-O3 -g -D TRACY_ENABLE
 profiled: matrix
 
+tracy:
+	git submodule update --init
+
 matrix: $(ALL_OBJECTS) build/main.o
-	g++ -std=c++20 $(FLAGS) -g -o matrix build/main.o $(ALL_OBJECTS) $(LIBS) $(EXTRA_LDFLAGS) $(INCLUDES)
+	g++ -std=c++20 $(FLAGS) -g -o matrix build/main.o $(ALL_OBJECTS) $(LIBS) -Wl,--as-needed $(INCLUDES)
 
 trampoline: src/trampoline.cpp build/x-raise
 	g++ -o trampoline src/trampoline.cpp
@@ -67,8 +72,13 @@ build/camera.o: src/camera.cpp include/camera.h
 build/api.o: src/api.cpp include/api.h include/world.h include/logger.h include/protos/api.pb.h
 	g++  -std=c++20 $(FLAGS) -o build/api.o -c src/api.cpp $(INCLUDES)
 
-build/controls.o: src/controls.cpp include/controls.h include/camera.h include/WindowManager/WindowManager.h include/world.h
+build/controls.o: src/controls.cpp include/controls.h include/camera.h include/WindowManager/WindowManager.h include/world.h include/ControlMappings.h
 	g++  -std=c++20 $(FLAGS) -o build/controls.o -c src/controls.cpp $(INCLUDES)
+
+build/ControlMappings.o: src/ControlMappings.cpp include/ControlMappings.h include/Config.h
+	g++  -std=c++20 $(FLAGS) -o build/ControlMappings.o -c src/ControlMappings.cpp $(INCLUDES)
+
+
 
 build/app.o: src/app.cpp include/app.h include/screen.h
 	g++  -std=c++20 $(FLAGS) -o build/app.o -c src/app.cpp $(INCLUDES) -Wno-narrowing
@@ -76,7 +86,7 @@ build/app.o: src/app.cpp include/app.h include/screen.h
 build/screen.o: src/screen.cpp include/screen.h 
 	g++  -std=c++20 $(FLAGS) -o build/screen.o -c src/screen.cpp $(INCLUDES) -Wno-narrowing
 
-build/WindowManager/WindowManager.o: src/WindowManager/WindowManager.cpp include/WindowManager/WindowManager.h include/controls.h include/logger.h include/world.h include/WindowManager/Space.h include/systems/Boot.h include/components/Bootable.h include/screen.h
+build/WindowManager/WindowManager.o: src/WindowManager/WindowManager.cpp include/WindowManager/WindowManager.h include/controls.h include/logger.h include/world.h include/WindowManager/Space.h include/systems/Boot.h include/components/Bootable.h include/screen.h include/Config.h
 	g++ -std=c++20 $(FLAGS) -o build/WindowManager/WindowManager.o -c src/WindowManager/WindowManager.cpp $(INCLUDES)
 
 build/WindowManager/Space.o: src/WindowManager/Space.cpp include/WindowManager/Space.h include/loader.h include/app.h include/camera.h include/renderer.h include/screen.h
@@ -118,7 +128,7 @@ build/model.o: src/model.cpp include/model.h include/mesh.h
 build/mesh.o: src/mesh.cpp include/mesh.h
 	g++ -std=c++20 $(FLAGS) -o build/mesh.o -c src/mesh.cpp $(INCLUDES)
 
-build/entity.o: src/entity.cpp include/entity.h
+build/entity.o: src/entity.cpp include/entity.h include/Config.h
 	g++ -std=c++20 $(FLAGS) -o build/entity.o -c src/entity.cpp $(INCLUDES)
 
 build/engineGui.o: src/engineGui.cpp include/engineGui.h include/components/RotateMovement.h include/model.h include/systems/Update.h include/components/Bootable.h include/components/Light.h include/engine.h
@@ -197,6 +207,9 @@ build/MultiPlayer/Client.o: src/MultiPlayer/Client.cpp include/MultiPlayer/Clien
 build/MultiPlayer/Server.o: src/MultiPlayer/Server.cpp include/MultiPlayer/Server.h include/systems/Player.h include/entity.h
 	g++ -std=c++20 $(FLAGS) -o build/MultiPlayer/Server.o -c src/MultiPlayer/Server.cpp $(INCLUDES)
 
+build/Config.o: src/Config.cpp include/Config.h
+	g++ -std=c++20 $(FLAGS) -o build/Config.o -c src/Config.cpp $(INCLUDES)
+
 
 # SQLite build logic
 build/%.o: src/sqlite/%.cpp
@@ -214,6 +227,10 @@ build/x-raise: src/x-raise.c
 
 build/diagnosis: src/diagnosis.cpp
 	g++ -o build/diagnosis src/diagnosis.cpp
+
+install:
+	install -d $(DESTDIR)bin
+	install -m 755 matrix $(DESTDIR)bin
 
 docs: game-design.md
 	pandoc -s game-design.md -o index.html
